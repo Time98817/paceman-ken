@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kenny's Pac-Man Clone</title>
+  <style>
+    body { margin: 0; background: #000; color: #fff; text-align: center; font-family: sans-serif; }
+    canvas { display: block; margin: 20px auto; background: #111; }
+    #score, #lives, #highscore { margin: 10px; }
+    #score { font-size: 20px; }
+    #lives { font-size: 18px; }
+    #highscore { font-size: 16px; color: gold; }
+    /* Splash screen styles */
+    #splash-screen {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: #000; display: flex;
+      flex-direction: column; align-items: center; justify-content: center;
+      z-index: 10;
+    }
+    #splash-screen img { width: 200px; margin-bottom: 20px; }
+    #splash-screen button {
+      padding: 10px 20px; font-size: 18px;
+      margin: 5px; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <!-- Splash Screen -->
+  <div id="splash-screen">
+    <img src="https://www.koras-productions.com/koras-logo.png" alt="Koras Logo">
+    <button id="start-game">Start Game</button>
+    <button id="mute-toggle">Mute</button>
+  </div>
+
+  <h1>👾 Kenny's Pac-Man Clone</h1>
+  <div id="score">Score: 0</div>
+  <div id="lives">Lives: 3</div>
+  <div id="highscore">High Score: 0</div>
+  <canvas id="game" width="448" height="496"></canvas>
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const tileSize = 16;
+    const rows = 31;
+    const cols = 28;
+    let score = 0;
+    let lives = 3;
+    let level = 1;
+    let highScore = localStorage.getItem("highScore") || 0;
+    document.getElementById("highscore").textContent = `High Score: ${highScore}`;
+    
+    // Audio assets
+    const dotSound = new Audio("https://www.soundjay.com/button/beep-07.wav");
+    const powerSound = new Audio("https://www.soundjay.com/button/beep-08b.wav");
+    let audioMuted = false; // Tracks mute state
+
+    // Game map initialization
+    const map = new Array(rows * cols).fill(0);
+    for (let i = 0; i < map.length; i++) {
+      map[i] = (Math.random() < 0.2) ? 1 : (Math.random() < 0.05 ? 3 : 0);
+    }
+    const pacman = { x: 14, y: 23, dx: 0, dy: 0 };
+    const ghosts = [
+      { x: 1, y: 1, color: "#f00" },
+      { x: 26, y: 1, color: "#0ff" },
+      { x: 1, y: 28, color: "#f0f" },
+      { x: 26, y: 28, color: "#ff0" }
+    ];
+
+    function drawTile(x, y, type) {
+      if (type === 1) {
+        ctx.fillStyle = "#0033cc";
+        ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+      } else if (type === 0) {
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(x * tileSize + 8, y * tileSize + 8, 2, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (type === 3) {
+        ctx.fillStyle = "#f0f";
+        ctx.beginPath();
+        ctx.arc(x * tileSize + 8, y * tileSize + 8, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawPacman() {
+      const img = new Image();
+      img.src = "https://imgur.com/a/YDelIeh";
+      ctx.drawImage(img, pacman.x * tileSize, pacman.y * tileSize, tileSize, tileSize);
+    }
+
+    function drawGhosts() {
+      for (const ghost of ghosts) {
+        ctx.fillStyle = ghost.color;
+        ctx.beginPath();
+        ctx.arc(ghost.x * tileSize + 8, ghost.y * tileSize + 8, 8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawMap() {
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          drawTile(x, y, map[y * cols + x]);
+        }
+      }
+    }
+
+    function updateGhosts() {
+      for (const ghost of ghosts) {
+        const dir = Math.floor(Math.random() * 4);
+        let dx = 0, dy = 0;
+        if (dir === 0) dx = 1;
+        if (dir === 1) dx = -1;
+        if (dir === 2) dy = 1;
+        if (dir === 3) dy = -1;
+        const newX = ghost.x + dx;
+        const newY = ghost.y + dy;
+        if (map[newY * cols + newX] !== 1) {
+          ghost.x = newX;
+          ghost.y = newY;
+        }
+      }
+    }
+
+    function resetPacman() {
+      pacman.x = 14;
+      pacman.y = 23;
+      pacman.dx = 0;
+      pacman.dy = 0;
+    }
+
+    function update() {
+      const newX = pacman.x + pacman.dx;
+      const newY = pacman.y + pacman.dy;
+      const nextTile = map[newY * cols + newX];
+      if (nextTile !== 1) {
+        pacman.x = newX;
+        pacman.y = newY;
+        if (nextTile === 0) {
+          map[newY * cols + newX] = 2;
+          score += 10;
+          if (!audioMuted) dotSound.play();
+        } else if (nextTile === 3) {
+          map[newY * cols + newX] = 2;
+          score += 50;
+          if (!audioMuted) powerSound.play();
+        }
+      }
+      for (const ghost of ghosts) {
+        if (pacman.x === ghost.x && pacman.y === ghost.y) {
+          lives--;
+          if (lives <= 0) {
+            if (score > highScore) {
+              localStorage.setItem("highScore", score);
+            }
+            alert("Game Over! Your Score: " + score);
+            window.location.reload();
+          } else {
+            resetPacman();
+          }
+        }
+      }
+      document.getElementById("score").textContent = `Score: ${score}`;
+      document.getElementById("lives").textContent = `Lives: ${lives}`;
+    }
+
+    function checkLevelComplete() {
+      if (!map.includes(0) && !map.includes(3)) {
+        level++;
+        alert("Level " + level + "! Get Ready!");
+        for (let i = 0; i < map.length; i++) {
+          map[i] = (Math.random() < 0.2) ? 1 : (Math.random() < 0.05 ? 3 : 0);
+        }
+        resetPacman();
+      }
+    }
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawMap();
+      drawGhosts();
+      drawPacman();
+      updateGhosts();
+      update();
+      checkLevelComplete();
+      requestAnimationFrame(gameLoop);
+    }
+
+    // Event listeners for keyboard controls
+    window.addEventListener("keydown", e => {
+      if (e.key === "ArrowUp") { pacman.dx = 0; pacman.dy = -1; }
+      if (e.key === "ArrowDown") { pacman.dx = 0; pacman.dy = 1; }
+      if (e.key === "ArrowLeft") { pacman.dx = -1; pacman.dy = 0; }
+      if (e.key === "ArrowRight") { pacman.dx = 1; pacman.dy = 0; }
+    });
+
+    // Splash screen functionality
+    document.getElementById("start-game").addEventListener("click", () => {
+      document.getElementById("splash-screen").style.display = "none";
+      gameLoop();
+    });
+
+    // Mute/Unmute functionality
+    document.getElementById("mute-toggle").addEventListener("click", () => {
+      audioMuted = !audioMuted;
+      document.getElementById("mute-toggle").textContent = audioMuted ? "Unmute" : "Mute";
+    });
+  </script>
+</body>
+</html>
